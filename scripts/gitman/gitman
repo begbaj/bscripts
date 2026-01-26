@@ -1,0 +1,92 @@
+#!/usr/bin/env python3
+import os
+import sys
+import subprocess
+
+BASE_DIR = os.path.expanduser(os.getenv("GITMAN_BASE_DIR", "~/srcs/"))
+
+
+def parse_url(url: str):
+    """Parses a full URL only for the initial clone."""
+    if url.startswith("git@"):
+        parts = url.split(":")[-1].replace(".git", "").split("/")
+        return parts[0], parts[1]
+    else:
+        tokens = url.rstrip("/").split("/")
+        return tokens[-2], tokens[-1].replace(".git", "")
+
+
+def get_path_from_shorthand(shorthand: str):
+    """Parses 'author/reponame' into a local path."""
+    try:
+        author, repo = shorthand.split("/")
+        return os.path.join(BASE_DIR, author, repo)
+    except ValueError:
+        print(f"Error: Expected format 'author/reponame', got '{shorthand}'")
+        sys.exit(1)
+
+
+# --- Command Logic ---
+
+
+def clone(url: str):
+    author, reponame = parse_url(url)
+    path = os.path.join(BASE_DIR, author, reponame)
+    if os.path.exists(path):
+        print(f"Directory already exists: {path}")
+        return
+    os.makedirs(path, exist_ok=True)
+    subprocess.run(["git", "clone", url, path])
+
+
+def open_shell(target: str):
+    path = get_path_from_shorthand(target)
+    print(f"Entering shell at {path}...")
+    subprocess.run([os.environ.get("SHELL", "bash")], cwd=path)
+
+
+def edit_vscode(target: str):
+    path = get_path_from_shorthand(target)
+    subprocess.run(["code", path])
+
+
+def edit_terminal(target: str):
+    path = get_path_from_shorthand(target)
+    editor = os.environ.get("EDITOR", "vim")
+    subprocess.run([editor, "."], cwd=path)
+
+
+def open_fm(target: str):
+    path = get_path_from_shorthand(target)
+    opener = "open" if sys.platform == "darwin" else "xdg-open"
+    subprocess.run([opener, path])
+
+
+# --- Main Runner ---
+
+
+def main():
+    commands = {
+        "clone": clone,  # Takes URL
+        "cd": open_shell,  # Takes author/repo
+        "code": edit_vscode,  # Takes author/repo
+        "edit": edit_terminal,  # Takes author/repo
+        "fm": open_fm,  # Takes author/repo
+    }
+
+    if len(sys.argv) < 3:
+        print("Usage:")
+        print("  gitman clone <url>")
+        print("  gitman <cd|code|edit|fm> <author/reponame>")
+        sys.exit(1)
+
+    cmd, arg = sys.argv[1], sys.argv[2]
+
+    if cmd in commands:
+        commands[cmd](arg)
+    else:
+        print(f"Unknown command: {cmd}")
+
+
+if __name__ == "__main__":
+    main()
